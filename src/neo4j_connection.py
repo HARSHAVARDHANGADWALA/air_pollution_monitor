@@ -1,4 +1,4 @@
-﻿"""
+"""
 Neo4j Database Connection and Transaction Management
 Provides robust singleton driver lifecycle management, credential discovery,
 parameterized Cypher execution, and real CSV Knowledge Graph ingestion.
@@ -93,13 +93,19 @@ class Neo4jConnection:
             )
         return self._driver
 
+    def _get_session(self, driver: Driver) -> Session:
+        """Helper to create a session respecting optional database names."""
+        if self.database and self.database.strip():
+            return driver.session(database=self.database.strip())
+        return driver.session()
+
     def verify_connection(self) -> Tuple[bool, str]:
         """Test active Neo4j connectivity and return (status, message)."""
         try:
             driver = self.get_driver()
             driver.verify_connectivity()
             # Perform a test lightweight Cypher ping
-            with driver.session(database=self.database) as session:
+            with self._get_session(driver) as session:
                 res = session.run("RETURN 1 AS ping").single()
                 if res and res["ping"] == 1:
                     return True, "Connected successfully to Neo4j database!"
@@ -110,7 +116,7 @@ class Neo4jConnection:
             if "Unauthorized" in error_msg or "authentication" in error_msg.lower():
                 return False, "Authentication failed: Please check username and password."
             elif "Connection refused" in error_msg or "ServiceUnavailable" in error_msg:
-                return False, f"Cannot reach Neo4j at {self.uri}. Ensure Neo4j is running."
+                return False, f"Cannot reach Neo4j at {self.uri}. Ensure Neo4j is running or URI is accessible."
             return False, f"Connection failed: {error_msg}"
 
     def run_query(
@@ -129,7 +135,7 @@ class Neo4jConnection:
             result = tx.run(query, parameters)
             return [record.data() for record in result]
 
-        with driver.session(database=self.database) as session:
+        with self._get_session(driver) as session:
             if read_only:
                 return session.execute_read(_execute)
             else:
@@ -146,7 +152,7 @@ class Neo4jConnection:
         driver = self.get_driver()
         parameters = parameters or {}
 
-        with driver.session(database=self.database) as session:
+        with self._get_session(driver) as session:
             result = session.run(query, parameters)
             consume = result.consume()
             return {
@@ -169,7 +175,7 @@ class Neo4jConnection:
             "CREATE INDEX datetime_value_idx IF NOT EXISTS FOR (d:DateTime) ON (d.value)"
         ]
         driver = self.get_driver()
-        with driver.session(database=self.database) as session:
+        with self._get_session(driver) as session:
             for c in constraints:
                 try:
                     session.run(c)
@@ -211,7 +217,7 @@ class Neo4jConnection:
             self.create_constraints()
 
             driver = self.get_driver()
-            with driver.session(database=self.database) as session:
+            with self._get_session(driver) as session:
                 if clear_existing:
                     session.run("MATCH (n) DETACH DELETE n")
 
