@@ -142,39 +142,40 @@ conn = get_db_connection()
 # 3. SIDEBAR CONTROLS & CONNECTION STATUS
 # ==========================================
 
-st.sidebar.markdown("### 🌍 Project Controls")
+st.sidebar.markdown("### 🌍 System Status")
 
 is_connected, conn_msg = conn.verify_connection()
 
 if is_connected:
     st.sidebar.success("🟢 Neo4j Connected")
 else:
-    st.sidebar.error("🔴 Neo4j Connection Failed")
-    st.sidebar.caption(conn_msg)
+    st.sidebar.error("🔴 Neo4j Not Connected")
+    st.sidebar.caption("Neo4j database is stopped. Please start your Neo4j Desktop database or verify your .env file.")
 
-with st.sidebar.expander("⚙️ Connection Settings", expanded=not is_connected):
-    uri_input = st.text_input("Neo4j URI", value=conn.uri, help="e.g. bolt://127.0.0.1:7687 or neo4j://127.0.0.1:7687")
+# Single click dataset sync button
+if is_connected:
+    if st.sidebar.button("🔄 Sync Dataset to Knowledge Graph", use_container_width=True, help="Ingest ap_air_pollution_2021_2023.csv"):
+        with st.spinner("Ingesting Andhra Pradesh air pollution dataset into Neo4j..."):
+            success, msg, stats = conn.ingest_dataset_csv(clear_existing=False)
+            if success:
+                st.sidebar.success(msg)
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.sidebar.error(msg)
+
+# Optional Advanced override (collapsed by default)
+with st.sidebar.expander("⚙️ Advanced Connection (Optional)", expanded=False):
+    st.caption("Auto-loaded from `.env` / `secrets.toml`. Modify only if overriding.")
+    uri_input = st.text_input("Neo4j URI", value=conn.uri)
     user_input = st.text_input("Username", value=conn.username)
     pass_input = st.text_input("Password", value=conn.password, type="password")
     db_input = st.text_input("Database", value=conn.database)
 
-    col_c1, col_c2 = st.columns(2)
-    with col_c1:
-        if st.button("Connect / Save", use_container_width=True):
-            conn.update_credentials(uri=uri_input, username=user_input, password=pass_input, database=db_input)
-            st.cache_data.clear()
-            st.rerun()
-
-    with col_c2:
-        if st.button("Sync CSV to KG", use_container_width=True, help="Ingest real ap_air_pollution_2021_2023.csv"):
-            with st.spinner("Ingesting dataset into Knowledge Graph..."):
-                success, msg, stats = conn.ingest_dataset_csv(clear_existing=False)
-                if success:
-                    st.sidebar.success(msg)
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.sidebar.error(msg)
+    if st.button("Apply Changes", use_container_width=True):
+        conn.update_credentials(uri=uri_input, username=user_input, password=pass_input, database=db_input)
+        st.cache_data.clear()
+        st.rerun()
 
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
